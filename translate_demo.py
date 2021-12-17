@@ -15,8 +15,9 @@ CHAR_LANG = ["CHS"]
 NON_CHAR_LANG = ["ENG"]
 
 parser = argparse.ArgumentParser(description='Generate text bboxes given a image file')
-parser.add_argument('--mode', default='demo', type=str, help='Run demo in either single image demo mode (demo) or web service mode (web)')
-parser.add_argument('--image', default='', type=str, help='Image file if using demo mode')
+parser.add_argument('--mode', default='demo', type=str, help='Run demo in either single image demo mode (demo), web service mode (web) or batch translation mode (batch)')
+parser.add_argument('--image', default='', type=str, help='Image file if using demo mode or Image folder name if using batch mode')
+parser.add_argument('--image-dst', default='', type=str, help='Destination folder for translated images in batch mode')
 parser.add_argument('--size', default=1536, type=int, help='image square size')
 parser.add_argument('--use-inpainting', action='store_true', help='turn on/off inpainting')
 parser.add_argument('--use-cuda', action='store_true', help='turn on/off cuda')
@@ -179,7 +180,13 @@ from PIL import Image
 import time
 import asyncio
 
+def replace_prefix(s: str, old: str, new: str) :
+	if s.startswith(old) :
+		s = new + s[len(old):]
+	return s
+
 async def main(mode = 'demo') :
+<<<<<<< HEAD
     print(' -- Loading models')
     import os
     os.makedirs('result', exist_ok = True)
@@ -223,3 +230,82 @@ async def main(mode = 'demo') :
 
 if __name__ == '__main__':
     asyncio.run(main(args.mode))
+=======
+	print(' -- Loading models')
+	import os
+	os.makedirs('result', exist_ok = True)
+	text_render.prepare_renderer()
+	with open('alphabet-all-v5.txt', 'r', encoding = 'utf-8') as fp :
+		dictionary = [s[:-1] for s in fp.readlines()]
+	load_ocr_model(dictionary, args.use_cuda)
+	load_detection_model(args.use_cuda)
+	load_inpainting_model(args.use_cuda)
+
+	if mode == 'demo' :
+		print(' -- Running in single image demo mode')
+		if not args.image :
+			print('please provide an image')
+			parser.print_usage()
+			return
+		img = cv2.imread(args.image)
+		await infer(img, mode, '')
+	elif mode == 'web' :
+		print(' -- Running in web service mode')
+		print(' -- Waiting for translation tasks')
+		nonce = crypto_utils.rand_bytes(16).hex()
+		import subprocess
+		import sys
+		subprocess.Popen([sys.executable, 'web_main.py', nonce, '5003'])
+		while True :
+			task_id = get_task(nonce)
+			if task_id :
+				print(f' -- Processing task {task_id}')
+				img = cv2.imread(f'result/{task_id}/input.png')
+				try :
+					infer_task = asyncio.create_task(infer(img, mode, nonce, task_id))
+					asyncio.gather(infer_task)
+				except :
+					import traceback
+					traceback.print_exc()
+					update_state(task_id, nonce, 'error')
+			else :
+				await asyncio.sleep(0.1)
+	elif mode == 'batch' :
+		src = os.path.abspath(args.image)
+		if src[-1] == '\\' or src[-1] == '/' :
+			src = src[:-1]
+		dst = args.image_dst or src + '-translated'
+		if os.path.exists(dst) and not os.path.isdir(dst) :
+			print(f'Destination `{dst}` already exists and is not a directory! Please specify another directory.')
+			return
+		if os.path.exists(dst) and os.listdir(dst) :
+			print(f'Destination directory `{dst}` already exists! Please specify another directory.')
+			return
+		print('Processing image in source directory')
+		files = []
+		for root, subdirs, files in os.walk(src) :
+			dst_root = replace_prefix(root, src, dst)
+			os.makedirs(dst_root, exist_ok = True)
+			for f in files :
+				if f.lower() == '.thumb' :
+					continue
+				filename = os.path.join(root, f)
+				try :
+					img = cv2.imread(filename)
+					if img is None :
+						continue
+				except Exception :
+					pass
+				try :
+					dst_filename = replace_prefix(filename, src, dst)
+					print('Processing', filename, '->', dst_filename)
+					await infer(img, 'demo', '', dst_image_name = dst_filename)
+				except Exception :
+					import traceback
+					traceback.print_exc()
+					pass
+
+if __name__ == '__main__':
+	loop = asyncio.get_event_loop()
+	loop.run_until_complete(main(args.mode))
+>>>>>>> 8cbbebe266696169a341df521b10ff538c82c490

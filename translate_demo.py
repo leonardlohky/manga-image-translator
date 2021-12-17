@@ -186,51 +186,6 @@ def replace_prefix(s: str, old: str, new: str) :
 	return s
 
 async def main(mode = 'demo') :
-<<<<<<< HEAD
-    print(' -- Loading models')
-    import os
-    os.makedirs('result', exist_ok = True)
-    text_render.prepare_renderer()
-    with open('alphabet-all-v5.txt', 'r', encoding = 'utf-8') as fp :
-        dictionary = [s[:-1] for s in fp.readlines()]
-    load_ocr_model(dictionary, args.use_cuda)
-    load_detection_model(args.use_cuda)
-    load_inpainting_model(args.use_cuda)
-
-    if mode == 'demo' :
-        print(' -- Running in single image demo mode')
-        if not args.image :
-            print('please provide an image')
-            parser.print_usage()
-            return
-        img = cv2.imread(args.image)
-        await infer(img, mode, '')
-    elif mode == 'web' :
-        print(' -- Running in web service mode')
-        print(' -- Waiting for translation tasks')
-        nonce = crypto_utils.rand_bytes(16).hex()
-        import subprocess
-        import sys
-        subprocess.Popen([sys.executable, 'web_main.py', nonce, '5003'])
-        while True :
-            task_id = get_task(nonce)
-            if task_id :
-                print(f' -- Processing task {task_id}')
-                img = cv2.imread(f'result/{task_id}/input.png')
-                try :
-                    infer_task = asyncio.create_task(infer(img, mode, nonce, task_id))
-                    asyncio.gather(infer_task)
-                except :
-                    import traceback
-                    traceback.print_exc()
-                    update_state(task_id, nonce, 'error')
-            else :
-                await asyncio.sleep(0.1)
-    
-
-if __name__ == '__main__':
-    asyncio.run(main(args.mode))
-=======
 	print(' -- Loading models')
 	import os
 	os.makedirs('result', exist_ok = True)
@@ -308,4 +263,4 @@ if __name__ == '__main__':
 if __name__ == '__main__':
 	loop = asyncio.get_event_loop()
 	loop.run_until_complete(main(args.mode))
->>>>>>> 8cbbebe266696169a341df521b10ff538c82c490
+

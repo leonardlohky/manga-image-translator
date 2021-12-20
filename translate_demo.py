@@ -107,7 +107,9 @@ async def infer(
 
     if mode == 'web' and task_id :
         update_state(task_id, nonce, 'ocr')
-    textlines = await dispatch_ocr(img, textlines, args.use_cuda, args)
+        
+    ocrParamConfig = config.OCRConfig()
+    textlines = await dispatch_ocr(img, textlines, args.use_cuda, args, ocrParamConfig)
 
     mergeParamConfig = config.TextlineMergeConfig()
     text_regions, textlines = await dispatch_textline_merge(textlines, img.shape[1], img.shape[0], mergeParamConfig, verbose = args.verbose)

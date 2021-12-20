@@ -144,7 +144,6 @@ def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height, config,
         if quadrilateral_can_merge_region_coarse(ubox, vbox) :
             G.add_edge(u, v)
 
-    print(config.std_threshold)
     region_indices: List[Set[int]] = []
     for node_set in nx.algorithms.components.connected_components(G) :
         # step 2: split each region

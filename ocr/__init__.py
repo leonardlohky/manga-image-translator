@@ -36,13 +36,13 @@ def chunks(lst, n):
 	for i in range(0, len(lst), n):
 		yield lst[i:i + n]
 
-def run_ocr_32px(img: np.ndarray, cuda: bool, quadrilaterals: List[Tuple[Quadrilateral, str]], max_chunk_size = 16, verbose: bool = False) :
+def run_ocr_32px(img: np.ndarray, cuda: bool, quadrilaterals: List[Tuple[Quadrilateral, str]], config, verbose: bool = False) :
 	text_height = 32
 	regions = [q.get_transformed_region(img, d, text_height) for q, d in quadrilaterals]
 	out_regions = []
 	perm = sorted(range(len(regions)), key = lambda x: regions[x].shape[1])
 	ix = 0
-	for indices in chunks(perm, max_chunk_size) :
+	for indices in chunks(perm, config.max_chunk_size) :
 		N = len(indices)
 		widths = [regions[i].shape[1] for i in indices]
 		max_width = 4 * (max(widths) + 7) // 4
@@ -62,7 +62,7 @@ def run_ocr_32px(img: np.ndarray, cuda: bool, quadrilaterals: List[Tuple[Quadril
 			images = images.cuda()
 		ret = ocr_infer_bacth(images, MODEL_32PX, widths)
 		for i, (pred_chars_index, prob, fr, fg, fb, br, bg, bb) in enumerate(ret) :
-			if prob < 0.8 :
+			if prob < config.prob_threshold :
 				continue
 			fr = (torch.clip(fr.view(-1), 0, 1).mean() * 255).long().item()
 			fg = (torch.clip(fg.view(-1), 0, 1).mean() * 255).long().item()
@@ -115,7 +115,7 @@ def generate_text_direction(bboxes: List[Quadrilateral]) :
 		for node in nodes :
 			yield bboxes[node], majority_dir
 
-async def dispatch(img: np.ndarray, textlines: List[Quadrilateral], cuda: bool, args: dict, model_name: str = '32px', batch_size: int = 16, verbose: bool = False) -> List[Quadrilateral] :
+async def dispatch(img: np.ndarray, textlines: List[Quadrilateral], cuda: bool, args: dict, config, model_name: str = '32px', verbose: bool = False) -> List[Quadrilateral] :
 	print(' -- Running OCR')
 	if model_name == '32px' :
-		return run_ocr_32px(img, cuda, list(generate_text_direction(textlines)), batch_size)
+		return run_ocr_32px(img, cuda, list(generate_text_direction(textlines)), config)

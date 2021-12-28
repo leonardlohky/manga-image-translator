@@ -12,3 +12,7 @@ class OCRConfig(object):
     def __init__(self):
         self.prob_threshold = 0.4
         self.max_chunk_size = 16
+        
+class TextRendererConfig(object):
+    def __init__(self):
+        self.word_gap = 10  

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+import re
 import asyncio
 import torch
 import einops
@@ -11,8 +11,7 @@ import requests
 import importlib.util
 from oscrypto import util as crypto_utils
 
-CHAR_LANG = ["CHS"]
-NON_CHAR_LANG = ["ENG"]
+NON_ALPHABET_LANG = ["CHS", "CHT", "KOR", "JPN"]
 
 parser = argparse.ArgumentParser(description='Generate text bboxes given a image file')
 parser.add_argument('--mode', default='demo', type=str, help='Run demo in either single image demo mode (demo), web service mode (web) or batch translation mode (batch)')
@@ -59,6 +58,12 @@ def get_task(nonce) :
     except :
         return None
 
+def fix_punctuation_spacing(translated_sentences):
+    for i in range(len(translated_sentences)):
+        translated_sentences[i] = re.sub(r'(?<=[.,!?])(?=[^\s.,!?])', r' ', translated_sentences[i])
+        
+    return translated_sentences
+        
 from detection import dispatch as dispatch_detection, load_model as load_detection_model
 from ocr import dispatch as dispatch_ocr, load_model as load_ocr_model
 from inpainting import dispatch as dispatch_inpainting, load_model as load_inpainting_model
@@ -111,6 +116,7 @@ async def infer(
     ocrParamConfig = config.OCRConfig()
     textlines = await dispatch_ocr(img, textlines, args.use_cuda, args, ocrParamConfig)
 
+    print(' -- Check merge for bounding boxes')
     mergeParamConfig = config.TextlineMergeConfig()
     text_regions, textlines = await dispatch_textline_merge(textlines, img.shape[1], img.shape[0], mergeParamConfig, verbose = args.verbose)
     if args.verbose :
@@ -162,13 +168,17 @@ async def infer(
     if not translated_sentences and text_regions :
         update_state(task_id, nonce, 'error')
         return
+    
+    # to insert space after punctuation marks for non char-based langs
+    translated_sentences = fix_punctuation_spacing(translated_sentences)
 
     print(' -- Rendering translated text')
     if mode == 'web' and task_id :
         update_state(task_id, nonce, 'render')
     # render translated texts
-    if args.target_lang in CHAR_LANG:
-        output = await dispatch_rendering(np.copy(img_inpainted), args.text_mag_ratio, translated_sentences, textlines, text_regions, args.force_horizontal)
+    renderParamConfig = config.TextRendererConfig()
+    if args.target_lang in NON_ALPHABET_LANG:
+        output = await dispatch_rendering(np.copy(img_inpainted), args.text_mag_ratio, translated_sentences, textlines, text_regions, args.force_horizontal, renderParamConfig)
     else:
         output = await dispatch_rendering_non_char(np.copy(img_inpainted), text_regions, translated_sentences, np.copy(final_mask))
 
@@ -177,10 +187,6 @@ async def infer(
 
     if mode == 'web' and task_id :
         update_state(task_id, nonce, 'finished')
-
-from PIL import Image
-import time
-import asyncio
 
 def replace_prefix(s: str, old: str, new: str) :
 	if s.startswith(old) :

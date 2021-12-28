@@ -55,8 +55,6 @@ def count_valuable_text(text) :
 
 def split_text_region(bboxes: List[Quadrilateral], region_indices: Set[int], gamma = 0.5, sigma = 2, std_threshold = 6.0, verbose: bool = False) -> List[Set[int]] :
     region_indices = list(region_indices)
-    if verbose :
-        print('to split', region_indices)
         
     # case #1
     if len(region_indices) == 1 :
@@ -71,6 +69,7 @@ def split_text_region(bboxes: List[Quadrilateral], region_indices: Set[int], gam
             and abs(bboxes[region_indices[0]].angle - bboxes[region_indices[1]].angle) < 4 * np.pi / 180 :
             return [set(region_indices)]
         else :
+            print("Split set %s into: %s" % ([set(region_indices)], [set([region_indices[0]]), set([region_indices[1]])]))
             return [set([region_indices[0]]), set([region_indices[1]])]
         
     # case 3
@@ -148,7 +147,7 @@ def merge_bboxes_text_region(bboxes: List[Quadrilateral], width, height, config,
     for node_set in nx.algorithms.components.connected_components(G) :
         # step 2: split each region
         if verbose :
-            print(' -- spliting', node_set)
+            print(' -- check split for nodes', node_set)
         region_indices.extend(split_text_region(bboxes, node_set, config.gamma, config.sigma, config.std_threshold, verbose = verbose))
     if verbose :
         print('region_indices', region_indices)

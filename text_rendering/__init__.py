@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from . import text_render
 
-async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translated_sentences: List[str], textlines: List[Quadrilateral], text_regions: List[Quadrilateral], force_horizontal: bool) -> np.ndarray :
+async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translated_sentences: List[str], textlines: List[Quadrilateral], text_regions: List[Quadrilateral], force_horizontal: bool, config) -> np.ndarray :
     """
     Text rendering function for character based texts, e.g. CHS
     """
@@ -19,7 +19,6 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
             region.majority_dir = 'h'
         print(region.text)
         print(trans_text)
-        #print(region.majority_dir, region.pts)
         
         # find font size to fit text inside bounding box
         fg = (region.fg_r, region.fg_g, region.fg_b) # foreground
@@ -38,13 +37,14 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
         font_size = round(font_size)
         #img_bbox = cv2.polylines(img_bbox, [region.pts], True, color=(0, 0, 255), thickness = 2)
 
-        region_aabb = region.aabb
-        print(region_aabb.x, region_aabb.y, region_aabb.w, region_aabb.h)
-
         # round font_size to fixed powers of 2, so later LRU cache can work
         font_size_enlarged = findNextPowerOf2(font_size) * text_mag_ratio
         enlarge_ratio = font_size_enlarged / font_size
         font_size = font_size_enlarged
+        print('font_size:', font_size) # required font size
+        
+        # ensure there is sufficient space to render all text within region
+        region_aabb = region.aabb
         while True :
             enlarged_w = round(enlarge_ratio * region_aabb.w)
             enlarged_h = round(enlarge_ratio * region_aabb.h)
@@ -54,7 +54,6 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
                 enlarge_ratio *= 1.1
                 continue
             break
-        print('font_size:', font_size) # required font size
 
         # begin placing translated text into respective regions
         tmp_canvas = np.ones((enlarged_h * 2, enlarged_w * 2, 3), dtype = np.uint8) * 127
@@ -119,7 +118,7 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
     
     return img_canvas
 
-async def dispatch_non_char(image, regions, text, mask, bg_color=255):
+async def dispatch_non_char(image, regions, translated_sentences, mask, bg_color=255):
     """
     Text rendering function for non-character based texts, e.g. ENG
     """
@@ -128,20 +127,21 @@ async def dispatch_non_char(image, regions, text, mask, bg_color=255):
     im_array[mask==1] = bg_color
     masked_im = Image.fromarray(im_array)
         
-    # Set default font_size to 40
-    font_size = 40
+    # Set default font_size to 30
+    font_size = 35
     font = ImageFont.truetype("./fonts/mangat.ttf", font_size)
-    space = 5
+    space = 10
     
     region_list = []
     for region in regions:
         region_aabb = region.aabb
         region_fg = (region.fg_r, region.fg_g, region.fg_b) # foreground
         region_bg = (region.bg_r, region.bg_g, region.bg_b) # background
-        region_metadata = ((region_aabb.x, region_aabb.y, region_aabb.w, region_aabb.h), (region_fg, region_bg))
+        region_ori_txt = region.text # original text
+        region_metadata = ((region_aabb.x, region_aabb.y, region_aabb.w, region_aabb.h), (region_fg, region_bg), region_ori_txt)
         region_list.append(region_metadata)
         
-    for region_data, t in zip(region_list, text):
+    for region_data, t in zip(region_list, translated_sentences):
         # Set default text color to black
         text_color = 0
         # Set default background to white
@@ -150,6 +150,10 @@ async def dispatch_non_char(image, regions, text, mask, bg_color=255):
         # unpack region metadata
         coord = region_data[0]
         color_data = region_data[1]
+        ori_txt = region_data[2]
+        
+        print(ori_txt)
+        print(t)
         
         # Calculate the width and height of text bubbles
         width = coord[2]
@@ -157,29 +161,25 @@ async def dispatch_non_char(image, regions, text, mask, bg_color=255):
 
         # determine required background and text color
         bg = int((color_data[1][0] + color_data[1][1] + color_data[1][2]) / 3)
-        # if im_array[coord[1]:coord[3],coord[0]:coord[2]].mean()<100:
-        #     bg = bg_color
-        #     text_color = 0
+        
         # Create a new image size equal to the text box
-
         img = Image.new("1", (width, height), color=bg)
         draw = ImageDraw.Draw(img)
         # Set default coordinates for drawing to 0
         v_coord = 0
         h_coord = 0
         words = t.split()
-#         draw.text((v_coord, h_coord), words[0], text_color, font=font)
+
         if not words:
             words = ['....']
-#         print(words)
+
+        # Not sure what this block is for, seems to be soley for getting the
+        # gap value
         lst_word_len, word_height = font.getsize(words[0])
-        
         
         for i, word in enumerate(words[1:]):
             font_width, font_height = font.getsize(word)
-#             print(width,h_coord,v_coord,font_width,space)
-#             print((width-h_coord)<(font_width+space))
-            if (width-(h_coord+(lst_word_len + space)))>(font_width+space):
+            if (width - (h_coord + (lst_word_len + space))) > (font_width + space):
                 h_coord += (lst_word_len + space)
                 draw.text((h_coord, v_coord), word, text_color, font=font)
                 lst_word_len, word_height = font.getsize(word)
@@ -187,30 +187,29 @@ async def dispatch_non_char(image, regions, text, mask, bg_color=255):
                 h_coord = 0
                 v_coord += font_size
                 draw.text((h_coord, v_coord), word, text_color, font=font)
-                lst_word_len,_ = font.getsize(word)
+                lst_word_len, _ = font.getsize(word)
                 
         gap = (height - v_coord) / 2 - word_height        
-#         img = Image.new("1", (width, height), color=bg)
         draw = ImageDraw.Draw(masked_im)
         # Set default coordinates for drawing to 0
         v_coord = gap
         h_coord = 0
-#         print(gap)
-        font_size = 40
+        font_size = 35
         
-        if gap > 40:
-            font_size = 40
+        # Actual rendering of translated text on masked img
+        if gap > 35:
+            font_size = 35
         words = t.split()
         if not words:
             words = ['....']
-        draw.text((h_coord+coord[0], v_coord+coord[1]), words[0], text_color, font=font)
+        draw.text((h_coord+coord[0], v_coord + coord[1]), words[0], text_color, font=font)
         lst_word_len,_ = font.getsize(words[0])
         
         for i, word in enumerate(words[1:]):
             font_width, font_height = font.getsize(word)
-            if (width-(h_coord+(lst_word_len + space)))>(font_width+space):
+            if (width - (h_coord + (lst_word_len + space))) > (font_width + space):
                 h_coord += (lst_word_len + space)
-                draw.text((h_coord+coord[0], v_coord+coord[1]), word, text_color, font=font)
+                draw.text((h_coord + coord[0], v_coord + coord[1]), word, text_color, font=font)
                 lst_word_len,_ = font.getsize(word)
             else:
                 h_coord = 0

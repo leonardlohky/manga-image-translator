@@ -9,6 +9,7 @@ import cv2
 import unicodedata
 import freetype
 from utils import BBox, Quadrilateral
+from PIL import ImageFont
 
 def _is_whitespace(ch):
     """Checks whether `chars` is a whitespace character."""
@@ -240,6 +241,7 @@ def put_char(canvas: np.ndarray, mask: np.ndarray, x: int, y: int, font_size: in
     else :
         place_x = glyph.bitmap_left#max((offset_x - bitmap.width) >> 1, 0)
         place_y = max(3 * font_size // 4 - glyph.bitmap_top, 0)
+        
     place_x = max(place_x, 0)
     place_y = max(place_y, 0)
     new_char_map = np.zeros((size + place_y, size + place_x),dtype=np.uint8)
@@ -247,16 +249,19 @@ def put_char(canvas: np.ndarray, mask: np.ndarray, x: int, y: int, font_size: in
     new_char_map[place_y:place_y+char_map.shape[0], place_x:place_x+char_map.shape[1]] = char_map[:available_region.shape[0],:available_region.shape[1]]
     char_map = new_char_map
     char_map = char_map.reshape((char_map.shape[0],char_map.shape[1],1))
-    available_shape = canvas[y :y+font_size,x: x+font_size,:].shape
+    available_shape = canvas[y :y + font_size, x: x + font_size,:].shape
     char_map = char_map[:available_shape[0],:available_shape[1]]
+    
     if len(char_map.shape) == 3 :
         char_map = char_map.squeeze(-1)
     if border_color :
         char_map, char_map_alpha, char_color, border_color = add_color(char_map, char_color, border_color=border_color, border_size=border_size)
     else :
         char_map, char_map_alpha, char_color, border_color = add_color(char_map, char_color)
-    canvas[y:y+font_size,x: x+font_size,:] = char_map
-    mask[y:y+font_size,x: x+font_size] += char_map_alpha
+    
+    canvas[y:y + font_size, x: x + font_size,:] = char_map # draw char on img
+    mask[y:y + font_size, x: x + font_size] += char_map_alpha
+    
     if offset_y == 0 and direction == 1 :
         offset_y = old_font_size
         
@@ -313,20 +318,17 @@ def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask:
     x2 = x + w
     y1 = y
     y2 = y + h
-    #cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
     # font_size = round(h / (line_count * 0.9))
     rows = h // font_size
     cols = w // font_size
-    # while rows * cols < len(text) :
-    #     font_size -= 1
-    #     rows = h // font_size
-    #     cols = w // font_size
+            
     fg_avg = (fg[0] + fg[1] + fg[2]) / 3
     if bg :
         bg_avg = (bg[0] + bg[1] + bg[2]) / 3
         if abs(fg_avg - bg_avg) < 40 :
             bg = None
     bgsize = int(max(font_size * 0.07, 1)) if bg else 0
+    
     spacing_x = 0#int(max(font_size * 0.05, 1))
     spacing_y = spacing_x
     x = x1 + max(spacing_x, 0)
@@ -346,16 +348,31 @@ def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask:
             if txt_i >= len(text) :
                 return True
             x += spacing_x + x_offset
+            
+            # check whether should write on next row instead
+            # Case 1: Next char will exceed width (x2)
             if x + font_size > x2 :
+                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
                 break
+            
+            # Case 2: Next char will exceed width (x2)
             if x > cur_line_bbox.width() * mag_ratio + x1 + font_size * 2 and i + 1 < len(lines) :
+                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
                 break
         y += font_size + spacing_y
         i += 1
+        
     return True
 
-def put_text(img: np.ndarray, text: str, line_count: int, x: int, y: int, w: int, h: int, fg: Tuple[int, int, int], bg: Optional[Tuple[int, int, int]]) :
-    pass
+def get_optimal_font(w: int, h: int, text: str, size=None):
+    font_size = 100
+    font = ImageFont.truetype("./fonts/mangat.ttf", font_size)
+    while (size is None or size[0] > w or size[1] > h) and font_size > 0:
+        font = ImageFont.truetype("./fonts/mangat.ttf", font_size)
+        size = font.getsize(text)
+        font_size -= 1
+        
+    return font
 
 def prepare_renderer(font_filenames = ['fonts/Arial-Unicode-Regular.ttf', 'fonts/msyh.ttc', 'fonts/msgothic.ttc']) :
     global CACHED_FONT_FACE

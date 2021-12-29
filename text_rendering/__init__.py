@@ -8,9 +8,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 from . import text_render
 
-async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translated_sentences: List[str], textlines: List[Quadrilateral], text_regions: List[Quadrilateral], force_horizontal: bool, config) -> np.ndarray :
+async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translated_sentences: List[str], textlines: List[Quadrilateral], text_regions: List[Quadrilateral], force_horizontal: bool, config, alphabet) -> np.ndarray :
     """
-    Text rendering function for character based texts, e.g. CHS
+    Text rendering function for non-alphabet based texts, e.g. CHS
     """
     for ridx, (trans_text, region) in enumerate(zip(translated_sentences, text_regions)) :
         if not trans_text :
@@ -73,7 +73,8 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
                 enlarged_w,
                 enlarged_h,
                 fg,
-                bg
+                bg,
+                alphabet
             )
         else :
             text_render.put_text_vertical(
@@ -110,6 +111,7 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
         src_pts[:, 1] = np.clip(np.round(src_pts[:, 1]), 0, enlarged_h * 2)
         dst_pts = region.pts
         M, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+        
         tmp_rgba = np.concatenate([tmp_canvas, tmp_mask[:, :, None]], axis = -1).astype(np.float32)
         rgba_region = np.clip(cv2.warpPerspective(tmp_rgba, M, (img_canvas.shape[1], img_canvas.shape[0]), flags = cv2.INTER_LINEAR, borderMode = cv2.BORDER_CONSTANT, borderValue = 0), 0, 255)
         canvas_region = rgba_region[:, :, 0: 3]
@@ -120,7 +122,7 @@ async def dispatch(img_canvas: np.ndarray, text_mag_ratio: np.integer, translate
 
 async def dispatch_non_char(image, regions, translated_sentences, mask, bg_color=255):
     """
-    Text rendering function for non-character based texts, e.g. ENG
+    Text rendering function for alphabet based texts, e.g. ENG
     """
     # Turn the image into array
     im_array = np.array(image)

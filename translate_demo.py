@@ -61,6 +61,7 @@ def get_task(nonce) :
 def fix_punctuation_spacing(translated_sentences):
     for i in range(len(translated_sentences)):
         translated_sentences[i] = re.sub(r'(?<=[.,!?])(?=[^\s.,!?])', r' ', translated_sentences[i])
+        translated_sentences[i] = re.sub(r'\s+([?.!"])', r'\1', translated_sentences[i])
         
     return translated_sentences
         
@@ -169,7 +170,7 @@ async def infer(
         update_state(task_id, nonce, 'error')
         return
     
-    # to insert space after punctuation marks for non char-based langs
+    # fix puncutation spacing issue for non alphabet-based langs
     translated_sentences = fix_punctuation_spacing(translated_sentences)
 
     print(' -- Rendering translated text')
@@ -178,9 +179,11 @@ async def infer(
     # render translated texts
     renderParamConfig = config.TextRendererConfig()
     if args.target_lang in NON_ALPHABET_LANG:
-        output = await dispatch_rendering(np.copy(img_inpainted), args.text_mag_ratio, translated_sentences, textlines, text_regions, args.force_horizontal, renderParamConfig)
+        alphabet = False
     else:
-        output = await dispatch_rendering_non_char(np.copy(img_inpainted), text_regions, translated_sentences, np.copy(final_mask))
+        alphabet = True
+        
+    output = await dispatch_rendering(np.copy(img_inpainted), args.text_mag_ratio, translated_sentences, textlines, text_regions, args.force_horizontal, renderParamConfig, alphabet)
 
     print(' -- Saving results')
     cv2.imwrite(f'result/{task_id}/final.png', cv2.cvtColor(output, cv2.COLOR_RGB2BGR))

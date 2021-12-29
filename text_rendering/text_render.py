@@ -311,9 +311,10 @@ def put_text_vertical(font_size: int, mag_ratio: float, img: np.ndarray, mask: n
                 break
         x -= spacing_x + font_size
         j += 1
+        
     return True
 
-def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask: np.ndarray, text: str, line_count: int, lines: List[Quadrilateral], x: int, y: int, w: int, h: int, fg: Tuple[int, int, int], bg: Optional[Tuple[int, int, int]]) :
+def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask: np.ndarray, text: str, line_count: int, lines: List[Quadrilateral], x: int, y: int, w: int, h: int, fg: Tuple[int, int, int], bg: Optional[Tuple[int, int, int]], alphabet=False) :
     x1 = x
     x2 = x + w
     y1 = y
@@ -336,45 +337,60 @@ def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask:
     txt_i = 0
     rot = 0
     i = 0
-    while True :
-        new_length = cols
-        if not new_length :
-            continue
-        x = x1 + spacing_x
-        cur_line_bbox = lines[i] if i < len(lines) else BBox(x1, 0, w, 0, '', 0)
+    
+    if not alphabet:
         while True :
-            x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, text[txt_i], 0, char_color=fg,border_color=bg,border_size=bgsize)
-            txt_i += 1
-            if txt_i >= len(text) :
-                return True
-            x += spacing_x + x_offset
+            new_length = cols
+            if not new_length :
+                continue
+            x = x1 + spacing_x
+            cur_line_bbox = lines[i] if i < len(lines) else BBox(x1, 0, w, 0, '', 0)
+            while True :
+                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, text[txt_i], 0, char_color=fg,border_color=bg,border_size=bgsize)
+                txt_i += 1
+                if txt_i >= len(text) :
+                    return True
+                x += spacing_x + x_offset
+                
+                # check whether should write on next row instead
+                # Case 1: Next char will exceed width (x2)
+                if x + font_size > x2 :
+                    break
+                
+                # Case 2: Next char will exceed width (x2)
+                if x > cur_line_bbox.width() * mag_ratio + x1 + font_size * 2 and i + 1 < len(lines) :
+                    break
+                
+            y += font_size + spacing_y
+            i += 1
             
-            # check whether should write on next row instead
-            # Case 1: Next char will exceed width (x2)
-            if x + font_size > x2 :
-                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
-                break
-            
-            # Case 2: Next char will exceed width (x2)
-            if x > cur_line_bbox.width() * mag_ratio + x1 + font_size * 2 and i + 1 < len(lines) :
-                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
-                break
-        y += font_size + spacing_y
-        i += 1
+    else:
+        while True :
+            x = x1 + spacing_x
+            cur_line_bbox = lines[i] if i < len(lines) else BBox(x1, 0, w, 0, '', 0)
+            while True :
+                x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, text[txt_i], 0, char_color=fg,border_color=bg,border_size=bgsize)
+                txt_i += 1
+                if txt_i >= len(text) :
+                    return True
+                x += spacing_x + x_offset
+                
+                # check whether should write on next row instead
+                # Case 1: Next char will exceed width (x2)
+                if x + font_size > x2 and text[txt_i] != " ":
+                    x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
+                    break
+                
+                # Case 2: Next char will exceed width (x2)
+                if x > cur_line_bbox.width() * mag_ratio + x1 + font_size * 2 and i + 1 < len(lines) :
+                    break
+                
+            y += font_size + spacing_y
+            i += 1
         
     return True
 
-def get_optimal_font(w: int, h: int, text: str, size=None):
-    font_size = 100
-    font = ImageFont.truetype("./fonts/mangat.ttf", font_size)
-    while (size is None or size[0] > w or size[1] > h) and font_size > 0:
-        font = ImageFont.truetype("./fonts/mangat.ttf", font_size)
-        size = font.getsize(text)
-        font_size -= 1
-        
-    return font
-
-def prepare_renderer(font_filenames = ['fonts/Arial-Unicode-Regular.ttf', 'fonts/msyh.ttc', 'fonts/msgothic.ttc']) :
+def prepare_renderer(font_filenames = ['fonts/Arial-Unicode-Regular.ttf', 'fonts/msyh.ttc', 'fonts/msgothic.ttc', 'fonts/mangat.ttf']) :
     global CACHED_FONT_FACE
     for font_filename in font_filenames :
         CACHED_FONT_FACE.append(freetype.Face(font_filename))

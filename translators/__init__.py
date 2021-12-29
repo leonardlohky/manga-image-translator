@@ -2,10 +2,6 @@
 from typing import List
 from . import baidu, google, youdao, deepl
 
-import re
-import googletrans
-
-
 LANGUAGE_CODE_MAP = {}
 
 VALID_LANGUAGES = {

@@ -377,7 +377,7 @@ def put_text_horizontal(font_size: int, mag_ratio: float, img: np.ndarray, mask:
                 
                 # check whether should write on next row instead
                 # Case 1: Next char will exceed width (x2)
-                if x + font_size > x2 and text[txt_i] != " ":
+                if x + font_size > x2 and text[txt_i] != " " :
                     x_offset, y_offset = put_char(img, mask, x, y, font_size, rot, "-", 0, char_color=fg,border_color=bg,border_size=bgsize)
                     break
                 
